@@ -1,0 +1,435 @@
+// Colliers360 LATAM – Plataforma de gestión de portafolios inmobiliarios
+// Google Cloud SQL (PostgreSQL) via Prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ORGANIZACIÓN (Colliers LATAM global) ────────────────────────────────────
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  businessUnits BusinessUnit[]
+  users         User[]
+  properties    Property[]
+  documents     Document[]
+  workflows     WorkflowTemplate[]
+}
+
+// ─── UNIDADES DE NEGOCIO (por país: MX, CO, CL, PE, AR, etc.) ───────────────
+
+model BusinessUnit {
+  id             String   @id @default(cuid())
+  name           String                          // ej: "Colliers México"
+  country        String                          // ISO 3166-1 alpha-2: MX, CO, CL…
+  currency       String   @default("USD")        // USD, MXN, COP, CLP, PEN, ARS
+  organizationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users         User[]
+  properties    Property[]
+  leases        Lease[]
+  transactions  Transaction[]
+  projects      Project[]
+  discussions   Discussion[]
+
+  @@index([organizationId])
+  @@index([country])
+}
+
+// ─── USUARIOS Y ROLES ────────────────────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN   // Colliers LATAM – acceso total
+  ADMIN         // Admin de unidad de negocio (país)
+  MANAGER       // Gerente – aprueba transacciones/proyectos
+  BROKER        // Broker/productor – crea y gestiona activos
+  READONLY      // Solo lectura
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  INVITED
+}
+
+model User {
+  id             String     @id @default(cuid())
+  firebaseUid    String?    @unique
+  email          String     @unique
+  name           String
+  avatarUrl      String?
+  phone          String?
+  role           UserRole   @default(BROKER)
+  status         UserStatus @default(INVITED)
+  organizationId String
+  businessUnitId String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization      Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessUnit      BusinessUnit?  @relation(fields: [businessUnitId], references: [id])
+  properties        Property[]     @relation("PropertyBroker")
+  transactions      Transaction[]  @relation("TransactionBroker")
+  assignedTxns      Transaction[]  @relation("TransactionAssignee")
+  projects          Project[]      @relation("ProjectManager")
+  comments          Comment[]
+  documents         Document[]
+  workflowActions   WorkflowAction[]
+  accounts          Account[]
+  sessions          Session[]
+
+  @@index([organizationId])
+  @@index([businessUnitId])
+}
+
+// ─── NEXT-AUTH ────────────────────────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── MÓDULO 2: WORKTRAC / IWMS ───────────────────────────────────────────────
+
+enum PropertyType {
+  OFICINA
+  INDUSTRIAL
+  RETAIL
+  BODEGA
+  MIXTO
+  OTRO
+}
+
+enum PropertyStatus {
+  DISPONIBLE
+  OCUPADO
+  EN_NEGOCIACION
+  INACTIVO
+}
+
+model Property {
+  id             String         @id @default(cuid())
+  name           String
+  address        String
+  city           String
+  country        String
+  lat            Float?
+  lng            Float?
+  type           PropertyType   @default(OFICINA)
+  status         PropertyStatus @default(DISPONIBLE)
+  totalAreaM2    Float?
+  floors         Int?
+  notes          String?        @db.Text
+  organizationId String
+  businessUnitId String
+  brokerId       String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id])
+  broker       User         @relation("PropertyBroker", fields: [brokerId], references: [id])
+  leases       Lease[]
+  documents    Document[]
+
+  @@index([organizationId])
+  @@index([businessUnitId])
+  @@index([country, city])
+}
+
+enum LeaseStatus {
+  ACTIVO
+  VENCIDO
+  EN_RENOVACION
+  CANCELADO
+}
+
+model Lease {
+  id             String      @id @default(cuid())
+  propertyId     String
+  businessUnitId String
+  tenant         String
+  startDate      DateTime
+  endDate        DateTime
+  renewalDate    DateTime?
+  areaM2         Float
+  rentAmount     Float
+  currency       String      @default("USD")
+  status         LeaseStatus @default(ACTIVO)
+  terms          String?     @db.Text
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  property     Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id])
+  documents    Document[]
+  financials   Financial[]
+
+  @@index([propertyId])
+  @@index([businessUnitId])
+  @@index([endDate])
+}
+
+enum TransactionType {
+  ARRENDAMIENTO
+  VENTA
+  RENOVACION
+  EXPANSION
+  DISPOSICION
+}
+
+enum TransactionStatus {
+  PROSPECTO
+  EN_NEGOCIACION
+  EN_REVISION
+  APROBADO
+  CERRADO
+  CANCELADO
+}
+
+model Transaction {
+  id             String            @id @default(cuid())
+  title          String
+  type           TransactionType
+  status         TransactionStatus @default(PROSPECTO)
+  propertyId     String?
+  businessUnitId String
+  brokerId       String
+  assigneeId     String?
+  value          Float?
+  currency       String            @default("USD")
+  expectedClose  DateTime?
+  closedAt       DateTime?
+  notes          String?           @db.Text
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id])
+  broker       User         @relation("TransactionBroker", fields: [brokerId], references: [id])
+  assignee     User?        @relation("TransactionAssignee", fields: [assigneeId], references: [id])
+  documents    Document[]
+  workflow     WorkflowAction[]
+
+  @@index([businessUnitId])
+  @@index([status])
+}
+
+enum ProjectStatus {
+  PLANIFICACION
+  EN_CURSO
+  EN_REVISION
+  COMPLETADO
+  CANCELADO
+}
+
+model Project {
+  id             String        @id @default(cuid())
+  title          String
+  description    String?       @db.Text
+  status         ProjectStatus @default(PLANIFICACION)
+  businessUnitId String
+  managerId      String
+  startDate      DateTime?
+  dueDate        DateTime?
+  completedAt    DateTime?
+  budget         Float?
+  currency       String        @default("USD")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id])
+  manager      User         @relation("ProjectManager", fields: [managerId], references: [id])
+  tasks        ProjectTask[]
+  documents    Document[]
+
+  @@index([businessUnitId])
+  @@index([status])
+}
+
+model ProjectTask {
+  id          String    @id @default(cuid())
+  projectId   String
+  title       String
+  description String?
+  done        Boolean   @default(false)
+  dueDate     DateTime?
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Financial {
+  id        String   @id @default(cuid())
+  leaseId   String
+  period    DateTime
+  amount    Float
+  currency  String   @default("USD")
+  paid      Boolean  @default(false)
+  paidAt    DateTime?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  @@index([leaseId])
+}
+
+// ─── MÓDULO 3: COLABORACIÓN DE EQUIPO ────────────────────────────────────────
+
+model Discussion {
+  id             String   @id @default(cuid())
+  title          String
+  body           String   @db.Text
+  businessUnitId String
+  authorId       String
+  pinned         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id])
+  comments     Comment[]
+
+  @@index([businessUnitId])
+}
+
+model Comment {
+  id           String   @id @default(cuid())
+  body         String   @db.Text
+  discussionId String
+  authorId     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  discussion Discussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  author     User       @relation(fields: [authorId], references: [id])
+
+  @@index([discussionId])
+}
+
+// ─── DOCUMENTOS (compartido entre módulos) ───────────────────────────────────
+
+enum DocumentContext {
+  PROPIEDAD
+  CONTRATO
+  TRANSACCION
+  PROYECTO
+  EQUIPO
+  OTRO
+}
+
+model Document {
+  id             String          @id @default(cuid())
+  name           String
+  url            String          // GCS signed URL
+  mimeType       String
+  sizeBytes      Int
+  context        DocumentContext @default(OTRO)
+  organizationId String
+  uploadedById   String
+  propertyId     String?
+  leaseId        String?
+  transactionId  String?
+  projectId      String?
+  createdAt      DateTime        @default(now())
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  uploadedBy    User         @relation(fields: [uploadedById], references: [id])
+  property      Property?    @relation(fields: [propertyId], references: [id])
+  lease         Lease?       @relation(fields: [leaseId], references: [id])
+  transaction   Transaction? @relation(fields: [transactionId], references: [id])
+  project       Project?     @relation(fields: [projectId], references: [id])
+
+  @@index([organizationId])
+  @@index([propertyId])
+  @@index([leaseId])
+}
+
+// ─── WORKFLOWS ───────────────────────────────────────────────────────────────
+
+model WorkflowTemplate {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  organizationId String
+  steps          WorkflowStep[]
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+}
+
+model WorkflowStep {
+  id         String @id @default(cuid())
+  templateId String
+  order      Int
+  label      String
+  role       UserRole
+
+  template WorkflowTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  actions  WorkflowAction[]
+
+  @@index([templateId])
+}
+
+model WorkflowAction {
+  id            String   @id @default(cuid())
+  stepId        String
+  userId        String
+  transactionId String?
+  approved      Boolean
+  comment       String?
+  createdAt     DateTime @default(now())
+
+  step        WorkflowStep @relation(fields: [stepId], references: [id])
+  user        User         @relation(fields: [userId], references: [id])
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@index([transactionId])
+}
