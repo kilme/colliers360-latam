@@ -17,7 +17,7 @@ const Schema = z.object({
   startDate:      z.string().optional(),
   dueDate:        z.string().optional(),
   budget:         z.coerce.number().nonnegative().optional(),
-  currency:       z.string().default("USD"),
+  currency:       z.string().min(1),
 });
 
 type FormData = z.infer<typeof Schema>;

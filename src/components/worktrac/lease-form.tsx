@@ -17,7 +17,7 @@ const Schema = z.object({
   renewalDate:    z.string().optional(),
   areaM2:         z.coerce.number().positive("Requerido"),
   rentAmount:     z.coerce.number().nonnegative("Requerido"),
-  currency:       z.string().default("USD"),
+  currency:       z.string().min(1),
   terms:          z.string().optional(),
 });
 

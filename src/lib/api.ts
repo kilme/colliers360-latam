@@ -2,8 +2,7 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import type { UserRole } from "@prisma/client";
-
-export type ApiSession = Awaited<ReturnType<typeof getServerSession>> & NonNullable<unknown>;
+import type { Session } from "next-auth";
 
 export async function requireAuth(minRole?: UserRole) {
   const session = await getServerSession(authOptions);
@@ -22,7 +21,7 @@ export async function requireAuth(minRole?: UserRole) {
   return { error: null, session };
 }
 
-export function buFilter(session: NonNullable<ApiSession>) {
+export function buFilter(session: Session) {
   if (session.user.role === "SUPER_ADMIN") return {};
   return { businessUnitId: session.user.businessUnitId ?? undefined };
 }

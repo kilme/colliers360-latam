@@ -73,25 +73,43 @@ async function main() {
       id: "seed-prop-1", name: "Torre Reforma 265", address: "Paseo de la Reforma 265",
       city: "Ciudad de México", country: "MX", type: "OFICINA" as const,
       status: "OCUPADO" as const, totalAreaM2: 12000, floors: 22,
+      lat: 19.4261, lng: -99.1676,
       businessUnitId: bus["MX"], brokerId: "seed-user-mx2",
     },
     {
       id: "seed-prop-2", name: "Parque Industrial Lerma", address: "Blvd. Miguel Hidalgo Km 23",
       city: "Toluca", country: "MX", type: "INDUSTRIAL" as const,
       status: "DISPONIBLE" as const, totalAreaM2: 35000, floors: 1,
+      lat: 19.2847, lng: -99.5568,
       businessUnitId: bus["MX"], brokerId: "seed-user-mx2",
     },
     {
       id: "seed-prop-3", name: "Centro Empresarial El Dorado", address: "Calle 50 #10-45",
       city: "Bogotá", country: "CO", type: "OFICINA" as const,
       status: "EN_NEGOCIACION" as const, totalAreaM2: 8500, floors: 15,
+      lat: 4.6540, lng: -74.0560,
       businessUnitId: bus["CO"], brokerId: "seed-user-co2",
     },
     {
       id: "seed-prop-4", name: "Parque Araucano Office", address: "Av. Manquehue Norte 1500",
       city: "Santiago", country: "CL", type: "OFICINA" as const,
       status: "DISPONIBLE" as const, totalAreaM2: 6200, floors: 10,
+      lat: -33.4101, lng: -70.5832,
       businessUnitId: bus["CL"], brokerId: "seed-user-cl1",
+    },
+    {
+      id: "seed-prop-5", name: "Centro Empresarial Miraflores", address: "Av. Larco 1301",
+      city: "Lima", country: "PE", type: "OFICINA" as const,
+      status: "OCUPADO" as const, totalAreaM2: 5400, floors: 12,
+      lat: -12.1219, lng: -77.0307,
+      businessUnitId: bus["PE"], brokerId: "seed-user-mx2",
+    },
+    {
+      id: "seed-prop-6", name: "Parque Industrial Pilar", address: "Ruta 8 Km 52",
+      city: "Buenos Aires", country: "AR", type: "INDUSTRIAL" as const,
+      status: "DISPONIBLE" as const, totalAreaM2: 28000, floors: 1,
+      lat: -34.4699, lng: -58.9130,
+      businessUnitId: bus["AR"], brokerId: "seed-user-mx2",
     },
   ];
 
@@ -109,21 +127,35 @@ async function main() {
   const leases = [
     {
       id: "seed-lease-1", propertyId: "seed-prop-1", businessUnitId: bus["MX"],
-      tenant: "Grupo Financiero Banorte", startDate: new Date("2023-01-01"),
-      endDate: new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000), // vence en 45 días
-      areaM2: 5000, rentAmount: 850000, currency: "MXN", status: "ACTIVO" as const,
+      tenant: "Grupo Financiero Banorte", landlord: "Fibra Uno",
+      startDate: new Date("2023-01-01"),
+      endDate: new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000),
+      areaM2: 5000, rentAmount: 850000, marketRent: 920000, currency: "MXN", status: "ACTIVO" as const,
     },
     {
       id: "seed-lease-2", propertyId: "seed-prop-1", businessUnitId: bus["MX"],
-      tenant: "Deloitte México", startDate: new Date("2022-06-01"),
-      endDate: new Date("2027-05-31"),
-      areaM2: 4500, rentAmount: 765000, currency: "MXN", status: "ACTIVO" as const,
+      tenant: "Deloitte México", landlord: "Fibra Uno",
+      startDate: new Date("2022-06-01"), endDate: new Date("2027-05-31"),
+      areaM2: 4500, rentAmount: 765000, marketRent: 810000, currency: "MXN", status: "ACTIVO" as const,
     },
     {
       id: "seed-lease-3", propertyId: "seed-prop-3", businessUnitId: bus["CO"],
-      tenant: "PwC Colombia", startDate: new Date("2024-03-01"),
-      endDate: new Date("2026-02-28"),
-      areaM2: 3200, rentAmount: 45000000, currency: "COP", status: "ACTIVO" as const,
+      tenant: "PwC Colombia", landlord: "Terranum",
+      startDate: new Date("2024-03-01"), endDate: new Date("2026-02-28"),
+      areaM2: 3200, rentAmount: 45000000, marketRent: 52000000, currency: "COP", status: "ACTIVO" as const,
+    },
+    {
+      id: "seed-lease-4", propertyId: "seed-prop-5", businessUnitId: bus["PE"],
+      tenant: "KPMG Perú", landlord: "Centenario Grupo",
+      startDate: new Date("2023-09-01"), endDate: new Date("2028-08-31"),
+      areaM2: 2800, rentAmount: 42000, marketRent: 47000, currency: "USD", status: "ACTIVO" as const,
+    },
+    {
+      id: "seed-lease-5", propertyId: "seed-prop-4", businessUnitId: bus["CL"],
+      tenant: "Accenture Chile", landlord: "Parque Araucano SA",
+      startDate: new Date("2022-01-01"),
+      endDate: new Date(now.getTime() + 25 * 24 * 60 * 60 * 1000),
+      areaM2: 3100, rentAmount: 28500000, marketRent: 32000000, currency: "CLP", status: "ACTIVO" as const,
     },
   ];
 

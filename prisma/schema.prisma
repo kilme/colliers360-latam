@@ -197,6 +197,8 @@ model Lease {
   renewalDate    DateTime?
   areaM2         Float
   rentAmount     Float
+  marketRent     Float?
+  landlord       String?
   currency       String      @default("USD")
   status         LeaseStatus @default(ACTIVO)
   terms          String?     @db.Text

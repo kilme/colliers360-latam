@@ -15,7 +15,7 @@ const Schema = z.object({
   type:           z.enum(["ARRENDAMIENTO","VENTA","RENOVACION","EXPANSION","DISPOSICION"]),
   businessUnitId: z.string().min(1),
   value:          z.coerce.number().nonnegative().optional(),
-  currency:       z.string().default("USD"),
+  currency:       z.string().min(1),
   expectedClose:  z.string().optional(),
   notes:          z.string().optional(),
 });

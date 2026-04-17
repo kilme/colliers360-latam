@@ -1,122 +1,132 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { StatCard } from "@/components/ui/stat-card";
-import { Badge } from "@/components/ui/badge";
-import { formatDate, formatCurrency } from "@/lib/utils";
-import { Building2, FolderKanban, FileText, TrendingUp, AlertCircle } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
+import { DashboardClient } from "./dashboard-client";
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
   const buId = session!.user.businessUnitId ?? undefined;
   const buFilter = buId ? { businessUnitId: buId } : {};
+  const orgFilter = { organizationId: session!.user.organizationId };
 
-  const now   = new Date();
-  const in30  = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const in90  = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+  const now = new Date();
 
-  const [
-    propCount,
-    txCount,
-    projCount,
-    activeLeases,
-    expiringLeases,
-    recentTx,
-  ] = await Promise.all([
-    prisma.property.count({ where: { ...buFilter, organizationId: session!.user.organizationId } }),
-    prisma.transaction.count({ where: { ...buFilter, status: { notIn: ["CERRADO","CANCELADO"] } } }),
-    prisma.project.count({ where: { ...buFilter, status: { notIn: ["COMPLETADO","CANCELADO"] } } }),
+  const [properties, leases, transactions, projects] = await Promise.all([
+    prisma.property.findMany({
+      where: { ...buFilter, ...orgFilter },
+      select: { id: true, name: true, lat: true, lng: true, type: true, totalAreaM2: true, city: true, country: true },
+    }),
     prisma.lease.findMany({
       where: { ...buFilter, status: "ACTIVO" },
-      select: { rentAmount: true, currency: true },
+      select: {
+        id: true, tenant: true, startDate: true, endDate: true,
+        areaM2: true, rentAmount: true, marketRent: true, landlord: true,
+        currency: true, propertyId: true,
+        property: { select: { name: true } },
+      },
     }),
-    prisma.lease.findMany({
-      where: { ...buFilter, status: "ACTIVO", endDate: { gte: now, lte: in90 } },
-      include: { property: { select: { name: true, city: true } } },
-      orderBy: { endDate: "asc" },
-      take: 5,
-    }),
-    prisma.transaction.findMany({
-      where: { ...buFilter },
-      include: { broker: { select: { name: true } } },
-      orderBy: { updatedAt: "desc" },
-      take: 5,
-    }),
+    prisma.transaction.count({ where: { ...buFilter, status: { notIn: ["CERRADO","CANCELADO"] } } }),
+    prisma.project.count({ where: { ...buFilter, status: { notIn: ["COMPLETADO","CANCELADO"] } } }),
   ]);
 
-  const totalMRR = activeLeases.reduce((s, l) => s + l.rentAmount, 0);
-  const currency = activeLeases[0]?.currency ?? "USD";
+  // ─── KPIs ────────────────────────────────────────────────────────────────────
+  const totalArea = properties.reduce((s, p) => s + (p.totalAreaM2 ?? 0), 0);
+  const leasedArea = leases.reduce((s, l) => s + l.areaM2, 0);
+  const occupancyRate = totalArea > 0 ? (leasedArea / totalArea) * 100 : 0;
+  const annualRent = leases.reduce((s, l) => s + l.rentAmount * 12, 0);
+  const currency = leases[0]?.currency ?? "USD";
 
-  const daysUntil = (d: Date) => Math.ceil((new Date(d).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  // WAULT – weighted average unexpired lease term (years)
+  const wault =
+    leases.length > 0
+      ? leases.reduce((sum, l) => {
+          const unexpiredYears = Math.max(
+            0,
+            (new Date(l.endDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 365.25)
+          );
+          return sum + unexpiredYears * l.rentAmount;
+        }, 0) / leases.reduce((s, l) => s + l.rentAmount, 0)
+      : 0;
+
+  // ─── EXPIRY GROUPS ───────────────────────────────────────────────────────────
+  const expiryBands = [
+    { band: "Vencidos",  min: -Infinity, max: 0 },
+    { band: "0–1 año",   min: 0, max: 1 },
+    { band: "1–3 años",  min: 1, max: 3 },
+    { band: "3–5 años",  min: 3, max: 5 },
+    { band: "> 5 años",  min: 5, max: Infinity },
+  ];
+  const expiryData = expiryBands.map(({ band, min, max }) => {
+    const group = leases.filter(l => {
+      const yrs = (new Date(l.endDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+      return yrs > min && yrs <= max;
+    });
+    return {
+      band,
+      count: group.length,
+      area: Math.round(group.reduce((s, l) => s + l.areaM2, 0)),
+    };
+  });
+
+  // ─── REVERSION BY PROPERTY ───────────────────────────────────────────────────
+  const reversionData = properties
+    .map(p => {
+      const propLeases = leases.filter(l => l.propertyId === p.id);
+      const passing = propLeases.reduce((s, l) => s + l.rentAmount, 0);
+      const market = propLeases.reduce((s, l) => s + (l.marketRent ?? l.rentAmount * 1.1), 0);
+      return { property: p.name.split(" ").slice(0, 2).join(" "), passing, market };
+    })
+    .filter(d => d.passing > 0);
+
+  // ─── PASSING RENT BY LANDLORD ────────────────────────────────────────────────
+  const landlordMap = new Map<string, number>();
+  for (const l of leases) {
+    const key = l.landlord ?? "Sin propietario";
+    landlordMap.set(key, (landlordMap.get(key) ?? 0) + l.rentAmount);
+  }
+  const landlordData = Array.from(landlordMap.entries())
+    .map(([landlord, rent]) => ({ landlord, rent }))
+    .sort((a, b) => b.rent - a.rent)
+    .slice(0, 6);
+
+  // ─── EXPIRING SOON ───────────────────────────────────────────────────────────
+  const in90 = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+  const expiringSoon = leases
+    .filter(l => new Date(l.endDate) >= now && new Date(l.endDate) <= in90)
+    .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime())
+    .slice(0, 5)
+    .map(l => ({
+      id: l.id,
+      tenant: l.tenant,
+      property: l.property.name,
+      endDate: l.endDate.toISOString(),
+      days: Math.ceil((new Date(l.endDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+    }));
+
+  const mapProperties = properties
+    .filter(p => p.lat && p.lng)
+    .map(p => ({ id: p.id, name: p.name, lat: p.lat!, lng: p.lng!, type: p.type }));
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-1">Resumen del portafolio</p>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard label="Propiedades"     value={propCount}                          icon={Building2}     color="blue" />
-        <StatCard label="MRR activo"      value={formatCurrency(totalMRR, currency)} icon={TrendingUp}    color="green" />
-        <StatCard label="Transacciones"   value={txCount}                            icon={FolderKanban}  color="indigo" />
-        <StatCard label="Proyectos"       value={projCount}                          icon={FileText}      color="violet" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Contratos por vencer */}
-        <div className="bg-white rounded-xl border border-gray-200">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-            <AlertCircle size={15} className="text-amber-500" />
-            <h2 className="font-semibold text-gray-800">Contratos por vencer (90 días)</h2>
-            <span className="ml-auto text-xs text-gray-400">{expiringLeases.length}</span>
-          </div>
-          {expiringLeases.length === 0 ? (
-            <p className="text-sm text-gray-400 p-5">Sin contratos próximos a vencer.</p>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {expiringLeases.map(l => {
-                const days = daysUntil(l.endDate);
-                return (
-                  <li key={l.id} className="px-5 py-3 flex items-center justify-between text-sm">
-                    <div>
-                      <p className="font-medium text-gray-900">{l.property.name}</p>
-                      <p className="text-xs text-gray-400">{l.property.city} · {formatDate(l.endDate)}</p>
-                    </div>
-                    <Badge variant={days <= 30 ? "danger" : "warning"}>{days}d</Badge>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-
-        {/* Actividad reciente */}
-        <div className="bg-white rounded-xl border border-gray-200">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-800">Actividad reciente</h2>
-          </div>
-          {recentTx.length === 0 ? (
-            <p className="text-sm text-gray-400 p-5">Sin actividad reciente.</p>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {recentTx.map(t => (
-                <li key={t.id} className="px-5 py-3 flex items-center justify-between text-sm">
-                  <div>
-                    <p className="font-medium text-gray-900 truncate max-w-[200px]">{t.title}</p>
-                    <p className="text-xs text-gray-400">{t.broker.name} · {formatDate(t.updatedAt)}</p>
-                  </div>
-                  <Badge
-                    variant={t.status === "CERRADO" ? "success" : t.status === "CANCELADO" ? "danger" : "neutral"}
-                  >
-                    {t.status.replace("_"," ")}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    </div>
+    <DashboardClient
+      kpis={{
+        propertyCount: properties.length,
+        totalAreaM2: totalArea,
+        leasedAreaM2: leasedArea,
+        occupancyRate: Math.round(occupancyRate * 10) / 10,
+        annualRent,
+        currency,
+        wault: Math.round(wault * 100) / 100,
+        activeLeases: leases.length,
+        transactions,
+        projects,
+      }}
+      mapProperties={mapProperties}
+      expiryData={expiryData}
+      reversionData={reversionData}
+      landlordData={landlordData}
+      expiringSoon={expiringSoon}
+    />
   );
 }

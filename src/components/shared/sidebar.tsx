@@ -4,16 +4,20 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Building2, FolderKanban,
-  FileText, Users, Settings, DollarSign,
-  MessageSquare, Paperclip, Globe,
+  LayoutDashboard, Building2, FolderKanban, FileText, Users, DollarSign,
+  MessageSquare, Paperclip, Globe, CalendarDays, ClipboardCheck,
+  Briefcase, Ticket, Leaf, BarChart2, StickyNote, Bell, HelpCircle,
+  PiggyBank,
 } from "lucide-react";
 
 const NAV = [
   {
     group: "Principal",
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/dashboard",             label: "Portfolio",       icon: LayoutDashboard },
+      { href: "/dashboard/events",      label: "Eventos",         icon: CalendarDays },
+      { href: "/dashboard/inspections", label: "Inspecciones",    icon: ClipboardCheck },
+      { href: "/dashboard/notifications",label: "Notificaciones", icon: Bell },
     ],
   },
   {
@@ -23,20 +27,31 @@ const NAV = [
       { href: "/worktrac/transacciones", label: "Transacciones", icon: FolderKanban },
       { href: "/worktrac/proyectos",     label: "Proyectos",     icon: FileText },
       { href: "/worktrac/finanzas",      label: "Finanzas",      icon: DollarSign },
+      { href: "/worktrac/jobs",          label: "Jobs",          icon: Briefcase },
+      { href: "/worktrac/tickets",       label: "Tickets",       icon: Ticket },
+      { href: "/worktrac/savings",       label: "Savings",       icon: PiggyBank },
+    ],
+  },
+  {
+    group: "Análisis",
+    items: [
+      { href: "/analytics/benchmarking", label: "Benchmarking",  icon: BarChart2 },
+      { href: "/analytics/environmental",label: "Ambiental",     icon: Leaf },
     ],
   },
   {
     group: "Equipo",
     items: [
-      { href: "/equipo/discusiones", label: "Discusiones", icon: MessageSquare },
-      { href: "/equipo/documentos",  label: "Documentos",  icon: Paperclip },
+      { href: "/equipo/discusiones",     label: "Discusiones",   icon: MessageSquare },
+      { href: "/equipo/documentos",      label: "Documentos",    icon: Paperclip },
+      { href: "/equipo/notas",           label: "Notas",         icon: StickyNote },
     ],
   },
   {
     group: "Administración",
     items: [
-      { href: "/admin/usuarios", label: "Usuarios",  icon: Users },
-      { href: "/admin/unidades", label: "Países",    icon: Globe },
+      { href: "/admin/usuarios",         label: "Usuarios",      icon: Users },
+      { href: "/admin/unidades",         label: "Países",        icon: Globe },
     ],
   },
 ];
@@ -82,6 +97,16 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
+
+      <div className="px-4 py-4 border-t border-[#003087]/60 shrink-0">
+        <Link
+          href="/support"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-blue-300/70 hover:text-white hover:bg-[#003087]/50 transition"
+        >
+          <HelpCircle size={13} />
+          Soporte
+        </Link>
+      </div>
     </aside>
   );
 }
