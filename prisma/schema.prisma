@@ -44,6 +44,7 @@ model BusinessUnit {
   transactions  Transaction[]
   projects      Project[]
   discussions   Discussion[]
+  notes         Note[]
 
   @@index([organizationId])
   @@index([country])
@@ -86,6 +87,7 @@ model User {
   assignedTxns      Transaction[]  @relation("TransactionAssignee")
   projects          Project[]      @relation("ProjectManager")
   comments          Comment[]
+  notes             Note[]
   documents         Document[]
   workflowActions   WorkflowAction[]
   accounts          Account[]
@@ -391,6 +393,24 @@ model Document {
   @@index([organizationId])
   @@index([propertyId])
   @@index([leaseId])
+}
+
+// ─── NOTAS ───────────────────────────────────────────────────────────────────
+
+model Note {
+  id             String   @id @default(cuid())
+  title          String
+  body           String   @db.Text
+  pinned         Boolean  @default(false)
+  businessUnitId String
+  authorId       String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  businessUnit BusinessUnit @relation(fields: [businessUnitId], references: [id])
+  author       User         @relation(fields: [authorId], references: [id])
+
+  @@index([businessUnitId])
 }
 
 // ─── WORKFLOWS ───────────────────────────────────────────────────────────────

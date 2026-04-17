@@ -4,9 +4,20 @@ import { prisma } from "@/lib/prisma";
 import { formatCurrency } from "@/lib/utils";
 import { DashboardClient } from "./dashboard-client";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ bu?: string }>;
+}) {
   const session = await getServerSession(authOptions);
-  const buId = session!.user.businessUnitId ?? undefined;
+  const { bu: buParam } = await searchParams;
+
+  // SUPER_ADMIN puede filtrar vía ?bu=; otros roles usan su propia BU
+  const buId =
+    session!.user.role === "SUPER_ADMIN"
+      ? buParam || undefined
+      : session!.user.businessUnitId ?? undefined;
+
   const buFilter = buId ? { businessUnitId: buId } : {};
   const orgFilter = { organizationId: session!.user.organizationId };
 

@@ -5,6 +5,7 @@ import { formatDate, formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { StatCard } from "@/components/ui/stat-card";
 import { DollarSign, TrendingUp, AlertCircle, CheckCircle } from "lucide-react";
+import { CashflowChart } from "./cashflow-chart";
 
 export default async function FinanzasPage() {
   const session = await getServerSession(authOptions);
@@ -18,16 +19,28 @@ export default async function FinanzasPage() {
     }),
     prisma.financial.findMany({
       where: { lease: buFilter },
-      include: { lease: { select: { tenant: true, property: { select: { name: true } } } } },
+      include: { lease: { select: { tenant: true, currency: true, property: { select: { name: true } } } } },
       orderBy: { period: "desc" },
-      take: 50,
+      take: 60,
     }),
   ]);
 
-  const totalMRR     = leases.reduce((s, l) => s + l.rentAmount, 0);
+  const totalMRR       = leases.reduce((s, l) => s + l.rentAmount, 0);
   const totalFacturado = financials.reduce((s, f) => s + f.amount, 0);
   const totalPagado    = financials.filter(f => f.paid).reduce((s, f) => s + f.amount, 0);
   const totalPendiente = totalFacturado - totalPagado;
+  const currency       = leases[0]?.currency ?? "USD";
+
+  // Agrupar por mes para el gráfico
+  const byMonth = new Map<string, { facturado: number; cobrado: number }>();
+  for (const f of [...financials].reverse()) {
+    const mes = new Date(f.period).toLocaleDateString("es-419", { month: "short", year: "2-digit" });
+    const cur = byMonth.get(mes) ?? { facturado: 0, cobrado: 0 };
+    cur.facturado += f.amount;
+    if (f.paid) cur.cobrado += f.amount;
+    byMonth.set(mes, cur);
+  }
+  const cashflowData = Array.from(byMonth.entries()).map(([mes, v]) => ({ mes, ...v }));
 
   return (
     <div className="space-y-6">
@@ -37,11 +50,13 @@ export default async function FinanzasPage() {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard label="Renta mensual (MRR)" value={`$${totalMRR.toLocaleString()}`}         icon={TrendingUp}  color="blue" />
-        <StatCard label="Total facturado"     value={`$${totalFacturado.toLocaleString()}`}    icon={DollarSign}  color="indigo" />
-        <StatCard label="Cobrado"             value={`$${totalPagado.toLocaleString()}`}       icon={CheckCircle} color="green" />
-        <StatCard label="Pendiente"           value={`$${totalPendiente.toLocaleString()}`}    icon={AlertCircle} color="amber" />
+        <StatCard label="Renta mensual (MRR)" value={formatCurrency(totalMRR, currency)}       icon={TrendingUp}  color="blue" />
+        <StatCard label="Total facturado"      value={formatCurrency(totalFacturado, currency)} icon={DollarSign}  color="indigo" />
+        <StatCard label="Cobrado"              value={formatCurrency(totalPagado, currency)}    icon={CheckCircle} color="green" />
+        <StatCard label="Pendiente"            value={formatCurrency(totalPendiente, currency)} icon={AlertCircle} color="amber" />
       </div>
+
+      <CashflowChart data={cashflowData} />
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100">
